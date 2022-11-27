@@ -9,7 +9,8 @@
 
 #include <Arduino.h>
 #include <I2Cdev.h>
-#include "MPU6050.h"
+#include <MPU6050.h>
+#include <KalmanFilter.h>
 
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     #include "Wire.h"
@@ -21,6 +22,9 @@
 
 MPU6050 mpu;
 
+KalmanFilter kalmanX(0.001, 0.003, 0.03);
+KalmanFilter kalmanY(0.001, 0.003, 0.03);
+
 bool blink = false;
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -29,6 +33,7 @@ bool blink = false;
 
 void init_mpu();
 void get_gyr_pry(int time, int t_s);
+void filtered_angles();
 void show(int t, double a_x, double a_y, double a_z);
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -53,7 +58,7 @@ __attribute__((unused)) void loop() {
     String value = Serial.readString();
 
     if (value == "0") {
-        get_gyr_pry(5, 1);
+        filtered_angles();
     }
     else if (value == "1") {
         get_gyr_pry(1000, 10);
@@ -86,6 +91,25 @@ void init_mpu() {
     Serial.println("Configuration completed.");
 
     mpu.setThreshold(3);
+}
+
+void filtered_angles() {
+    Serial.println("Time \t Pitch \t Roll \t (K)Pitch \t (K)Roll");
+
+    for (int i = 0; i <= 1000; i += 10) {
+        Vector acc = mpu.readNormalizeAccel();
+        Vector gyr = mpu.readNormalizeGyro();
+
+        double acc_pitch = -(atan2(acc.XAxis, sqrt(square(acc.YAxis) + square(acc.ZAxis))) * 180.0) / M_PI;
+        double acc_roll = (atan2(acc.YAxis, sqrt(square(acc.XAxis) + square(acc.ZAxis))) * 180.0) / M_PI;
+
+        double kal_pitch = kalmanY.update(acc_pitch, gyr.YAxis);
+        double kal_roll = kalmanX.update(acc_roll, gyr.XAxis);
+
+        Serial.print(i); Serial.print("\t");
+        Serial.print(acc_pitch); Serial.print("\t"); Serial.print(acc_roll); Serial.print("\t");
+        Serial.print(kal_pitch); Serial.print("\t"); Serial.println(kal_roll);
+    }
 }
 
 void get_gyr_pry(int time, int t_s) {
