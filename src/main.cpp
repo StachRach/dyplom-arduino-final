@@ -22,10 +22,8 @@
 
 MPU6050 mpu;
 
-KalmanFilter kalmanX(0.001, 0.003, 0.03);
-KalmanFilter kalmanY(0.001, 0.003, 0.03);
-
 bool blink = false;
+unsigned long timer;
 
 // ---------------------------------------------------------------------------------------------------------------------
 //                                                 DEFINICJE FUNKCJI
@@ -33,7 +31,7 @@ bool blink = false;
 
 void init_mpu();
 void get_gyr_pry(int time, int t_s);
-void filtered_angles();
+void filtered_angles(int t);
 void show(int t, double a_x, double a_y, double a_z);
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -43,11 +41,12 @@ void show(int t, double a_x, double a_y, double a_z);
 __attribute__((unused)) void setup() {
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     Wire.begin();
+    Wire.setClock(400000L);
 #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
     Fastwire::setup(400, true);
 #endif
 
-    Serial.begin(38400);
+    Serial.begin(115200);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -58,19 +57,10 @@ __attribute__((unused)) void loop() {
     String value = Serial.readString();
 
     if (value == "0") {
-        filtered_angles();
+        filtered_angles(10);
     }
     else if (value == "1") {
-        get_gyr_pry(1000, 10);
-    }
-    else if (value == "11") {
-        get_gyr_pry(1000, 100);
-    }
-    else if (value == "2") {
         get_gyr_pry(10000, 10);
-    }
-    else if (value == "22") {
-        get_gyr_pry(10000, 100);
     }
     else if (value == "9") {
         init_mpu();
@@ -82,23 +72,28 @@ __attribute__((unused)) void loop() {
 // ---------------------------------------------------------------------------------------------------------------------
 
 void init_mpu() {
-    Serial.println("Checking connection with a shield...");
+    Serial.println("Sprawdzanie polaczenia z shieldem...");
     Serial.println(mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G)
-        ? "Connection successful." : "Connection failed.");
+        ? "Polaczenie udane." : "Polaczenie nieudane.");
 
-    Serial.println("Offset configuration...");
+    Serial.println("Kalibracja zyroskopu...");
     mpu.calibrateGyro();
-    Serial.println("Configuration completed.");
+    Serial.println("Kalibracja ukonczona.");
 
-    mpu.setThreshold(3);
+    mpu.setThreshold(0);
 }
 
-void filtered_angles() {
-    Serial.println("Time \t Pitch \t Roll \t (K)Pitch \t (K)Roll");
+void filtered_angles(int t) {
+    KalmanFilter kalmanX(0.001, 0.003, 0.03);
+    KalmanFilter kalmanY(0.001, 0.003, 0.03);
 
-    for (int i = 0; i <= 1000; i += 10) {
+    Serial.println("Czas \t Pitch \t Roll \t (K)Pitch \t (K)Roll");
+
+    for (long i = 0; i <= 10000; i += t) {
         Vector acc = mpu.readNormalizeAccel();
         Vector gyr = mpu.readNormalizeGyro();
+
+        timer = millis();
 
         double acc_pitch = -(atan2(acc.XAxis, sqrt(square(acc.YAxis) + square(acc.ZAxis))) * 180.0) / M_PI;
         double acc_roll = (atan2(acc.YAxis, sqrt(square(acc.XAxis) + square(acc.ZAxis))) * 180.0) / M_PI;
@@ -109,6 +104,8 @@ void filtered_angles() {
         Serial.print(i); Serial.print("\t");
         Serial.print(acc_pitch); Serial.print("\t"); Serial.print(acc_roll); Serial.print("\t");
         Serial.print(kal_pitch); Serial.print("\t"); Serial.println(kal_roll);
+
+        delay(millis() - timer);
     }
 }
 
@@ -122,6 +119,8 @@ void get_gyr_pry(int time, int t_s) {
     for (int i = 0; i <= time; i+= t_s) {
         Vector gyr = mpu.readNormalizeGyro();
 
+        timer = millis();
+
         pitch += gyr.YAxis * t_s / 1000;
         roll += gyr.XAxis * t_s / 1000;
         yaw += gyr.ZAxis * t_s / 1000;
@@ -131,7 +130,7 @@ void get_gyr_pry(int time, int t_s) {
         blink = !blink;
         digitalWrite(LED_BUILTIN, blink);
 
-        delay(t_s);
+        delay(millis() - timer);
     }
 }
 
