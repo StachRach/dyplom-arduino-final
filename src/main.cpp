@@ -30,8 +30,8 @@ unsigned long timer;
 // ---------------------------------------------------------------------------------------------------------------------
 
 void init_mpu();
-void get_gyr_pry(int time, int t_s);
-void filtered_angles(int t);
+void get_gyr(int time, int t_s);
+void filtered_angles(int time, int t);
 void show(int t, double a_x, double a_y, double a_z);
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -57,10 +57,10 @@ __attribute__((unused)) void loop() {
     String value = Serial.readString();
 
     if (value == "0") {
-        filtered_angles(10);
+        filtered_angles(10000, 10);
     }
     else if (value == "1") {
-        get_gyr_pry(10000, 10);
+        get_gyr(10000, 10);
     }
     else if (value == "9") {
         init_mpu();
@@ -83,13 +83,13 @@ void init_mpu() {
     mpu.setThreshold(0);
 }
 
-void filtered_angles(int t) {
+void filtered_angles(int time, int t) {
     KalmanFilter kalmanX(0.001, 0.003, 0.03);
     KalmanFilter kalmanY(0.001, 0.003, 0.03);
 
     Serial.println("Czas \t Pitch \t Roll \t (K)Pitch \t (K)Roll");
 
-    for (long i = 0; i <= 10000; i += t) {
+    for (long i = 0; i <= time; i += t) {
         Vector acc = mpu.readNormalizeAccel();
         Vector gyr = mpu.readNormalizeGyro();
 
@@ -105,11 +105,14 @@ void filtered_angles(int t) {
         Serial.print(acc_pitch); Serial.print("\t"); Serial.print(acc_roll); Serial.print("\t");
         Serial.print(kal_pitch); Serial.print("\t"); Serial.println(kal_roll);
 
+        blink = !blink;
+        digitalWrite(LED_BUILTIN, blink);
+
         delay(millis() - timer);
     }
 }
 
-void get_gyr_pry(int time, int t_s) {
+void get_gyr(int time, int t_s) {
     Serial.println("t [ms] \t pitch \t roll \t yaw");
 
     double pitch = 0;
